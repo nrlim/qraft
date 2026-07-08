@@ -11,7 +11,16 @@ import {
   ComboboxList,
   ComboboxItem,
 } from "@/components/ui/combobox";
-import { Sparkles, Copy, Check, Play, Database, Plus, Loader2, User } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { SchemaMap } from "@/components/schema/schema-map";
+import { ParsedTable } from "@/lib/utils/sql-parser";
+import { Sparkles, Copy, Check, Play, Database, Plus, Loader2, User, Eye, Search } from "lucide-react";
 import { toast } from "sonner";
 
 interface SchemaOption {
@@ -36,6 +45,12 @@ export default function DashboardPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Schema Map state
+  const [schemaTables, setSchemaTables] = useState<ParsedTable[]>([]);
+  const [isTablesLoading, setIsTablesLoading] = useState(false);
+  const [showMapDialog, setShowMapDialog] = useState(false);
+  const [mapSearchQuery, setMapSearchQuery] = useState("");
 
   const filteredSchemas = schemaOptions.filter((s) =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -87,7 +102,23 @@ export default function DashboardPage() {
         console.error(err);
       }
     };
+    const fetchTables = async () => {
+      setIsTablesLoading(true);
+      try {
+        const res = await fetch(`/api/schemas/${schemaId}/tables`);
+        if (res.ok) {
+          const json = await res.json();
+          setSchemaTables(json.data || []);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsTablesLoading(false);
+      }
+    };
+    
     fetchHistory();
+    fetchTables();
   }, [schemaId]);
 
   // Auto scroll to bottom of chat
@@ -214,34 +245,47 @@ export default function DashboardPage() {
                 Loading schemas...
               </div>
             ) : hasSchemas ? (
-              <Combobox 
-                value={schemaOptions.find((s) => s.id === schemaId) || null} 
-                onValueChange={(val: SchemaOption | null) => {
-                  setSchemaId(val?.id || "");
-                  setSearchQuery(val?.name || "");
-                }}
-              >
-                <ComboboxInput 
-                  placeholder="Select a schema to start chatting..." 
-                  className="bg-white border-[#1C2024]/20 focus-visible:ring-[#002B5B]/30 h-9 w-full text-sm"
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  value={searchQuery}
-                />
-                <ComboboxContent>
-                  {filteredSchemas.length === 0 && (
-                    <div className="w-full justify-center py-2 text-center text-sm text-muted-foreground flex">
-                      No schema found.
-                    </div>
-                  )}
-                  <ComboboxList>
-                    {filteredSchemas.map((s) => (
-                      <ComboboxItem key={s.id} value={s}>
-                        {s.name}
-                      </ComboboxItem>
-                    ))}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
+              <div className="flex items-center gap-2">
+                <Combobox 
+                  value={schemaOptions.find((s) => s.id === schemaId) || null} 
+                  onValueChange={(val: SchemaOption | null) => {
+                    setSchemaId(val?.id || "");
+                    setSearchQuery(val?.name || "");
+                  }}
+                >
+                  <ComboboxInput 
+                    placeholder="Select a schema to start chatting..." 
+                    className="bg-white border-[#1C2024]/20 focus-visible:ring-[#002B5B]/30 h-9 w-full text-sm"
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={searchQuery}
+                  />
+                  <ComboboxContent>
+                    {filteredSchemas.length === 0 && (
+                      <div className="w-full justify-center py-2 text-center text-sm text-muted-foreground flex">
+                        No schema found.
+                      </div>
+                    )}
+                    <ComboboxList>
+                      {filteredSchemas.map((s) => (
+                        <ComboboxItem key={s.id} value={s}>
+                          {s.name}
+                        </ComboboxItem>
+                      ))}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+                {schemaId && (
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    className="shrink-0 h-9 w-9 text-[#002B5B] border-[#1C2024]/20 hover:bg-[#F8F9FA]"
+                    onClick={() => setShowMapDialog(true)}
+                    title="View Schema Map"
+                  >
+                    <Eye className="size-4" />
+                  </Button>
+                )}
+              </div>
             ) : (
               <div className="flex items-center gap-2">
                 <Link href="/dashboard/schemas">
@@ -358,6 +402,43 @@ export default function DashboardPage() {
           </form>
         </div>
       </div>
+
+      {/* Schema Map Dialog */}
+      <Dialog open={showMapDialog} onOpenChange={setShowMapDialog}>
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[95vh] flex flex-col p-0">
+          <DialogHeader className="pl-6 pr-14 py-4 border-b border-[#1C2024]/10 shrink-0 flex flex-row items-center justify-between gap-4">
+            <div>
+              <DialogTitle>Schema Map: {schemaOptions.find(s => s.id === schemaId)?.name}</DialogTitle>
+              <DialogDescription>
+                Visual representation of the knowledge base tables and relationships.
+              </DialogDescription>
+            </div>
+            
+            {/* Search Bar in Header */}
+            <div className="w-[320px]">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#1C2024]/40" />
+                <input 
+                  type="text"
+                  placeholder="Search tables or columns..."
+                  value={mapSearchQuery}
+                  onChange={(e) => setMapSearchQuery(e.target.value)}
+                  className="w-full h-10 pl-9 pr-4 rounded-[6px] border border-[#1C2024]/10 bg-white shadow-sm text-[13px] text-[#1C2024] placeholder:text-[#1C2024]/40 focus:outline-none focus:border-[#002B5B] focus:ring-1 focus:ring-[#002B5B] transition-shadow"
+                />
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden p-6 bg-[#F8F9FA]">
+            {isTablesLoading ? (
+              <div className="flex h-full items-center justify-center text-[#1C2024]/40">
+                <Loader2 className="size-8 animate-spin" />
+              </div>
+            ) : (
+              <SchemaMap tables={schemaTables} searchQuery={mapSearchQuery} />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

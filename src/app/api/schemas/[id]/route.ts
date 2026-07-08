@@ -20,7 +20,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { id } = await params;
 
     const schema = await db.query.schemas.findFirst({
-      where: and(eq(schemas.id, id), eq(schemas.userId, session.userId)),
+      where: eq(schemas.id, id),
     });
 
     if (!schema) {

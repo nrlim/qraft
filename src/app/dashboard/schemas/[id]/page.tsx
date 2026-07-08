@@ -7,6 +7,8 @@ import { ArrowLeft, Plus, Trash2, Code2, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SchemaMap } from "@/components/schema/schema-map";
 import {
   Dialog,
   DialogContent,
@@ -192,9 +194,29 @@ export default function SchemaDetailPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8 space-y-12">
-        {/* Derived Knowledge Section */}
-        <section className="space-y-6">
+      <div className="flex-1 overflow-y-auto p-8">
+        <Tabs defaultValue="map" className="w-full">
+          <TabsList className="mb-8">
+            <TabsTrigger value="map">Schema Map</TabsTrigger>
+            <TabsTrigger value="derived">Derived Knowledge</TabsTrigger>
+            <TabsTrigger value="source">SQL Source</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="map" className="mt-0">
+            <div className="mb-6">
+              <h2 className="text-xl font-medium text-[#1C2024] flex items-center gap-2">
+                <Database className="size-5 text-[#002B5B]" />
+                Schema Map
+              </h2>
+              <p className="mt-1 text-sm text-[#1C2024]/60 max-w-2xl">
+                Visual representation of your database tables and their relationships.
+              </p>
+            </div>
+            <SchemaMap tables={tables} />
+          </TabsContent>
+
+          <TabsContent value="derived" className="mt-0">
+            <section className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-medium text-[#1C2024] flex items-center gap-2">
@@ -304,25 +326,28 @@ export default function SchemaDetailPage() {
           ) : (
             <DataTable columns={columns} data={annotations} searchPlaceholder="Search annotations..." />
           )}
-        </section>
+          </section>
+        </TabsContent>
 
-        {/* Base Knowledge Section */}
-        <section className="space-y-4 pt-8 border-t border-[#1C2024]/10">
-          <div>
-            <h2 className="text-lg font-medium text-[#1C2024] flex items-center gap-2">
-              <Code2 className="size-4 text-[#1C2024]/60" />
-              Base SQL Knowledge
-            </h2>
-            <p className="mt-1 text-sm text-[#1C2024]/60">
-              The original uploaded DDL script used as the primary context for SQL generation.
-            </p>
-          </div>
-          <div className="rounded-[8px] border border-[#1C2024]/10 bg-[#F8F9FA] p-4 max-h-[400px] overflow-auto">
-            <pre className="text-xs font-mono text-[#1C2024]/80">
-              <code>{schema?.sqlContent}</code>
-            </pre>
-          </div>
-        </section>
+        <TabsContent value="source" className="mt-0">
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-lg font-medium text-[#1C2024] flex items-center gap-2">
+                <Code2 className="size-4 text-[#1C2024]/60" />
+                Base SQL Knowledge
+              </h2>
+              <p className="mt-1 text-sm text-[#1C2024]/60">
+                The original uploaded DDL script used as the primary context for SQL generation.
+              </p>
+            </div>
+            <div className="rounded-[8px] border border-[#1C2024]/10 bg-[#F8F9FA] p-4 max-h-[600px] overflow-auto">
+              <pre className="text-xs font-mono text-[#1C2024]/80">
+                <code>{schema?.sqlContent}</code>
+              </pre>
+            </div>
+          </section>
+        </TabsContent>
+      </Tabs>
       </div>
     </div>
   );

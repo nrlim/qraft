@@ -25,7 +25,6 @@ export async function GET() {
         updatedAt: schemas.updatedAt,
       })
       .from(schemas)
-      .where(eq(schemas.userId, session.userId))
       .orderBy(desc(schemas.createdAt));
 
     return NextResponse.json({ data: userSchemas });
