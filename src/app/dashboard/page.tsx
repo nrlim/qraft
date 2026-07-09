@@ -18,7 +18,14 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { SchemaMap } from "@/components/schema/schema-map";
+import { DerivedKnowledgeViewer } from "@/components/schema/derived-knowledge-viewer";
 import { ParsedTable } from "@/lib/utils/sql-parser";
 import { Sparkles, Copy, Check, Play, Database, Plus, Loader2, User, Eye, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -48,6 +55,7 @@ export default function DashboardPage() {
 
   // Schema Map state
   const [schemaTables, setSchemaTables] = useState<ParsedTable[]>([]);
+  const [schemaAnnotations, setSchemaAnnotations] = useState<any[]>([]);
   const [isTablesLoading, setIsTablesLoading] = useState(false);
   const [showMapDialog, setShowMapDialog] = useState(false);
   const [mapSearchQuery, setMapSearchQuery] = useState("");
@@ -102,13 +110,22 @@ export default function DashboardPage() {
         console.error(err);
       }
     };
-    const fetchTables = async () => {
+    const fetchTablesAndAnnotations = async () => {
       setIsTablesLoading(true);
       try {
-        const res = await fetch(`/api/schemas/${schemaId}/tables`);
-        if (res.ok) {
-          const json = await res.json();
+        const [tablesRes, annotationsRes] = await Promise.all([
+          fetch(`/api/schemas/${schemaId}/tables`),
+          fetch(`/api/schemas/${schemaId}/annotations`)
+        ]);
+
+        if (tablesRes.ok) {
+          const json = await tablesRes.json();
           setSchemaTables(json.data || []);
+        }
+        
+        if (annotationsRes.ok) {
+          const json = await annotationsRes.json();
+          setSchemaAnnotations(json.data || []);
         }
       } catch (err) {
         console.error(err);
@@ -118,7 +135,7 @@ export default function DashboardPage() {
     };
     
     fetchHistory();
-    fetchTables();
+    fetchTablesAndAnnotations();
   }, [schemaId]);
 
   // Auto scroll to bottom of chat
@@ -428,14 +445,32 @@ export default function DashboardPage() {
               </div>
             </div>
           </DialogHeader>
-          <div className="flex-1 overflow-hidden p-6 bg-[#F8F9FA]">
-            {isTablesLoading ? (
-              <div className="flex h-full items-center justify-center text-[#1C2024]/40">
-                <Loader2 className="size-8 animate-spin" />
+          <div className="flex-1 overflow-hidden bg-[#F8F9FA] flex flex-col">
+            <Tabs defaultValue="map" className="w-full h-full flex flex-col">
+              <div className="px-6 pt-4 shrink-0">
+                <TabsList>
+                  <TabsTrigger value="map">Schema Map</TabsTrigger>
+                  <TabsTrigger value="derived">Derived JSON Fields</TabsTrigger>
+                </TabsList>
               </div>
-            ) : (
-              <SchemaMap tables={schemaTables} searchQuery={mapSearchQuery} />
-            )}
+
+              <div className="flex-1 overflow-hidden relative">
+                {isTablesLoading ? (
+                  <div className="absolute inset-0 flex items-center justify-center text-[#1C2024]/40">
+                    <Loader2 className="size-8 animate-spin" />
+                  </div>
+                ) : (
+                  <>
+                    <TabsContent value="map" className="h-full m-0 p-6 border-0">
+                      <SchemaMap tables={schemaTables} searchQuery={mapSearchQuery} />
+                    </TabsContent>
+                    <TabsContent value="derived" className="h-full m-0 p-6 overflow-y-auto border-0">
+                      <DerivedKnowledgeViewer annotations={schemaAnnotations} />
+                    </TabsContent>
+                  </>
+                )}
+              </div>
+            </Tabs>
           </div>
         </DialogContent>
       </Dialog>

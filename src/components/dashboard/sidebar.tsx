@@ -67,7 +67,10 @@ export function Sidebar({ user }: SidebarProps) {
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
         {NAV_ITEMS.map((item) => {
           if (item.roles && !item.roles.includes(user?.role || "user")) return null;
-          const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+          const isActive =
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname === item.href || pathname?.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.name}
