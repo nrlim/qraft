@@ -6,6 +6,7 @@ import { verifySession } from '@/lib/auth/session';
 import { getAiModel } from '@/lib/ai/provider';
 import { buildSystemPrompt } from '@/lib/ai/system-prompt';
 import { validateSqlOutput } from '@/lib/ai/guardrails';
+import { isDerivedKnowledgeRelevant } from '@/lib/ai/relevance';
 
 // Maximum number of prior messages to include as context for the AI.
 // Keeping this bounded prevents token inflation while still giving
@@ -30,28 +31,19 @@ export async function POST(req: Request) {
       return new Response('Message is required', { status: 400 });
     }
 
-    // Fetch the schema context
-    const [schema] = await db
-      .select()
-      .from(schemas)
-      .where(eq(schemas.id, schemaId));
+    const startTime = Date.now();
 
-    if (!schema) {
-      return new Response('Schema not found', { status: 404 });
-    }
-
-    // 1. Persist the new user message FIRST so ordering is correct
-    await db.insert(generations).values({
-      schemaId,
-      userId: session.userId,
-      role: 'user',
-      content: message.trim(),
-    });
-
-    // 2. Fetch recent history from DB (bounded window, excludes the message we just saved above
-    //    since we append it explicitly below)
-    const recentHistory = await db
-      .select({
+    // Parallelize all DB fetches
+    const [
+      [schema],
+      recentHistory,
+      annotations
+    ] = await Promise.all([
+      // Fetch schema
+      db.select().from(schemas).where(eq(schemas.id, schemaId)),
+      
+      // Fetch history (bounded window, excluding the message we just saved above)
+      db.select({
         role: generations.role,
         content: generations.content,
       })
@@ -61,8 +53,17 @@ export async function POST(req: Request) {
         eq(generations.userId, session.userId),
       ))
       .orderBy(desc(generations.createdAt))
-      // +1 to include the message we just inserted
-      .limit(MAX_HISTORY_MESSAGES + 1);
+      .limit(MAX_HISTORY_MESSAGES + 1),
+
+      // Fetch JSON field annotations for this schema
+      db.query.schemaFieldAnnotations.findMany({
+        where: eq(schemaFieldAnnotations.schemaId, schemaId),
+      })
+    ]);
+
+    if (!schema) {
+      return new Response('Schema not found', { status: 404 });
+    }
 
     // DB returns newest-first; reverse to chronological order
     const chronologicalHistory = recentHistory.reverse();
@@ -73,13 +74,21 @@ export async function POST(req: Request) {
       content: m.content,
     }));
 
-    // 3. Fetch JSON field annotations for this schema
-    const annotations = await db.query.schemaFieldAnnotations.findMany({
-      where: eq(schemaFieldAnnotations.schemaId, schemaId),
-    });
+    // Determine if derived knowledge is relevant to the user's message
+    const isRelevant = isDerivedKnowledgeRelevant(message, annotations);
+    const relevantAnnotations = isRelevant ? annotations : [];
 
     const model = getAiModel() as any;
-    const systemPrompt = buildSystemPrompt(schema.sqlContent, annotations, guardrailsEnabled);
+    const systemPrompt = buildSystemPrompt(schema.sqlContent, relevantAnnotations, guardrailsEnabled);
+
+    // 1. Persist the new user message FIRST so ordering is correct
+    // Doing this concurrently with stream initiation to reduce latency further
+    const userMessagePromise = db.insert(generations).values({
+      schemaId,
+      userId: session.userId,
+      role: 'user',
+      content: message.trim(),
+    });
 
     const result = await streamText({
       model,
@@ -87,6 +96,12 @@ export async function POST(req: Request) {
       messages: aiMessages,
       temperature: 0.1,
       onFinish: async ({ text }) => {
+        const endTime = Date.now();
+        const latencyMs = endTime - startTime;
+
+        // Ensure user message is fully saved before saving assistant response
+        await userMessagePromise;
+
         // Run server-side guardrail validation
         const validation = validateSqlOutput(text, { restrictDestructive: guardrailsEnabled });
         const finalContent = validation.passed ? text : (validation.replacementText || text);
@@ -97,11 +112,14 @@ export async function POST(req: Request) {
           userId: session.userId,
           role: 'assistant',
           content: finalContent,
+          latencyMs,
         });
       },
     });
 
-    return result.toDataStreamResponse();
+    const response = result.toDataStreamResponse();
+    response.headers.set('X-Derived-Knowledge-Used', isRelevant.toString());
+    return response;
   } catch (error) {
     console.error('Chat streaming error:', error);
     return new Response('Internal Server Error', { status: 500 });

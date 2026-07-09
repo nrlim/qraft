@@ -30,6 +30,7 @@ export async function GET(request: Request) {
         id: generations.id,
         role: generations.role,
         content: generations.content,
+        latencyMs: generations.latencyMs,
         createdAt: generations.createdAt,
       })
       .from(generations)

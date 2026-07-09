@@ -40,6 +40,7 @@ interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  latencyMs?: number;
 }
 
 export default function DashboardPage() {
@@ -113,6 +114,7 @@ export default function DashboardPage() {
             id: m.id,
             role: m.role as "user" | "assistant",
             content: m.content,
+            latencyMs: m.latencyMs,
           }))
         );
       }
@@ -245,6 +247,7 @@ export default function DashboardPage() {
             id: m.id,
             role: m.role as "user" | "assistant",
             content: m.content,
+            latencyMs: m.latencyMs,
           }))
         );
       }
@@ -407,6 +410,14 @@ export default function DashboardPage() {
                       <pre className="font-mono text-sm leading-relaxed overflow-x-auto whitespace-pre-wrap">
                         <code>{m.content}</code>
                       </pre>
+                      
+                      {m.latencyMs && (
+                        <div className="mt-3 flex items-center justify-end">
+                          <span className="text-[10px] font-medium text-[#1C2024]/40 bg-[#1C2024]/5 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            ⏱ {(m.latencyMs / 1000).toFixed(2)}s
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
