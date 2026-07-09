@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Plus, Trash2, Code2, Database } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Code2, Database, Pencil, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +26,7 @@ interface AnnotationItem {
   id: string;
   tableName: string;
   columnName: string;
+  contextLabel: string | null;
   jsonStructure: string;
   description: string | null;
   createdAt: string;
@@ -47,9 +48,13 @@ export default function SchemaDetailPage() {
   // Form State
   const [selectedTable, setSelectedTable] = useState("");
   const [selectedColumn, setSelectedColumn] = useState("");
+  const [contextLabel, setContextLabel] = useState("");
   const [jsonStructure, setJsonStructure] = useState("");
   const [description, setDescription] = useState("");
   const [formError, setFormError] = useState("");
+
+  const [editMode, setEditMode] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -80,6 +85,18 @@ export default function SchemaDetailPage() {
     }
   }, [schemaId, router]);
 
+  const refreshAnnotations = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/schemas/${schemaId}/annotations`);
+      if (res.ok) {
+        const json = await res.json();
+        setAnnotations(json.data || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [schemaId]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -95,12 +112,17 @@ export default function SchemaDetailPage() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/schemas/${schemaId}/annotations`, {
-        method: "POST",
+      const url = editMode 
+        ? `/api/schemas/${schemaId}/annotations/${editId}`
+        : `/api/schemas/${schemaId}/annotations`;
+        
+      const res = await fetch(url, {
+        method: editMode ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tableName: selectedTable,
           columnName: selectedColumn,
+          contextLabel: contextLabel || null,
           jsonStructure,
           description: description || null,
         }),
@@ -108,16 +130,19 @@ export default function SchemaDetailPage() {
 
       const json = await res.json();
       if (!res.ok) {
-        setFormError(json.message || "Failed to add annotation");
+        setFormError(json.message || `Failed to ${editMode ? 'update' : 'add'} annotation`);
         return;
       }
 
       setDialogOpen(false);
       setSelectedTable("");
       setSelectedColumn("");
+      setContextLabel("");
       setJsonStructure("");
       setDescription("");
-      fetchData(); // refresh annotations
+      setEditMode(false);
+      setEditId(null);
+      refreshAnnotations(); // refresh only annotations to avoid full reload
     } catch (err) {
       setFormError("An unexpected error occurred.");
     } finally {
@@ -136,6 +161,31 @@ export default function SchemaDetailPage() {
     }
   };
 
+  const handleEdit = (annotation: AnnotationItem) => {
+    setSelectedTable(annotation.tableName);
+    setSelectedColumn(annotation.columnName);
+    setContextLabel(annotation.contextLabel || "");
+    setJsonStructure(annotation.jsonStructure);
+    setDescription(annotation.description || "");
+    setEditMode(true);
+    setEditId(annotation.id);
+    setDialogOpen(true);
+  };
+
+  const handleOpenDialog = (open: boolean) => {
+    if (!open) {
+      setEditMode(false);
+      setEditId(null);
+      setSelectedTable("");
+      setSelectedColumn("");
+      setContextLabel("");
+      setJsonStructure("");
+      setDescription("");
+      setFormError("");
+    }
+    setDialogOpen(open);
+  };
+
   const availableColumns = tables.find(t => t.name === selectedTable)?.columns || [];
 
   const columns: ColumnDef<AnnotationItem>[] = [
@@ -149,6 +199,15 @@ export default function SchemaDetailPage() {
       header: "JSON Column",
     },
     {
+      accessorKey: "contextLabel",
+      header: "Context / Product",
+      cell: ({ row }) => (
+        <span className="text-sm font-medium text-[#002B5B]">
+          {row.getValue("contextLabel") || <span className="text-[#1C2024]/40 font-normal italic">Default (Any)</span>}
+        </span>
+      ),
+    },
+    {
       accessorKey: "description",
       header: "Description",
       cell: ({ row }) => <span className="text-[#1C2024]/60 truncate block max-w-[200px]">{row.getValue("description") || "-"}</span>,
@@ -157,12 +216,22 @@ export default function SchemaDetailPage() {
       id: "actions",
       header: "",
       cell: ({ row }) => (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-1">
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon"
+            className="text-[#1C2024]/40 hover:text-[#002B5B] hover:bg-[#002B5B]/10"
+            onClick={() => handleEdit(row.original)}
+            title="Edit Annotation"
+          >
+            <Pencil className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             className="text-[#1C2024]/40 hover:text-red-700 hover:bg-red-50"
             onClick={() => handleDelete(row.original.id)}
+            title="Delete Annotation"
           >
             <Trash2 className="size-4" />
           </Button>
@@ -228,20 +297,20 @@ export default function SchemaDetailPage() {
               </p>
             </div>
             
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog open={dialogOpen} onOpenChange={handleOpenDialog}>
               <DialogTrigger 
                 render={
-                  <Button className="bg-[#002B5B] text-white hover:bg-[#002B5B]/90 rounded-[6px]" />
+                  <Button className="bg-[#002B5B] text-white hover:bg-[#002B5B]/90 rounded-[6px]">
+                    <Plus className="mr-2 size-4" />
+                    Add Annotation
+                  </Button>
                 }
-              >
-                <Plus className="mr-2 size-4" />
-                Add Annotation
-              </DialogTrigger>
+              />
               <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Add JSON Field Annotation</DialogTitle>
+                  <DialogTitle>{editMode ? "Edit JSON Field Annotation" : "Add JSON Field Annotation"}</DialogTitle>
                   <DialogDescription>
-                    Select a table and column from your base schema, then provide its JSON structure.
+                    {editMode ? "Update the JSON structure and context label for this column." : "Select a table and column from your base schema, then provide its JSON structure."}
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleAddAnnotation} className="space-y-4">
@@ -279,6 +348,16 @@ export default function SchemaDetailPage() {
                   </div>
 
                   <div className="space-y-2">
+                    <label className="text-sm font-medium text-[#1C2024]">Context / Product (Optional)</label>
+                    <p className="text-xs text-[#1C2024]/60">Use this to disambiguate the JSON structure if it varies per product.</p>
+                    <Input
+                      value={contextLabel}
+                      onChange={(e) => setContextLabel(e.target.value)}
+                      placeholder="e.g. Motor, Health, Travel"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
                     <label className="text-sm font-medium text-[#1C2024]">JSON Structure / Schema <span className="text-red-500">*</span></label>
                     <p className="text-xs text-[#1C2024]/60">Provide a JSON example or a schema definition.</p>
                     <Textarea
@@ -305,12 +384,9 @@ export default function SchemaDetailPage() {
                   )}
 
                   <DialogFooter>
-                    <Button
-                      type="submit"
-                      disabled={isSubmitting || !selectedTable || !selectedColumn || !jsonStructure.trim()}
-                      className="bg-[#002B5B] text-white hover:bg-[#002B5B]/90 rounded-[6px]"
-                    >
-                      {isSubmitting ? "Adding..." : "Add Annotation"}
+                    <Button type="submit" disabled={isSubmitting || !selectedTable || !selectedColumn || !jsonStructure.trim()} className="w-full bg-[#002B5B] hover:bg-[#002B5B]/90 text-white rounded-[6px]">
+                      {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+                      {editMode ? "Save Changes" : "Save Annotation"}
                     </Button>
                   </DialogFooter>
                 </form>

@@ -72,7 +72,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { tableName, columnName, jsonStructure, description } = body;
+    const { tableName, columnName, contextLabel, jsonStructure, description } = body;
 
     if (!tableName || !columnName || !jsonStructure) {
       return NextResponse.json(
@@ -85,6 +85,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       schemaId: id,
       tableName,
       columnName,
+      contextLabel: contextLabel || null,
       jsonStructure,
       description: description || null,
     }).returning();

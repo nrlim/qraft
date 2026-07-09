@@ -20,10 +20,17 @@ If the user's request requires modifying or deleting data using these commands, 
 IMPORTANT: Some columns in the schema store JSON data. Below are the exact JSON structures for those columns (Derived Knowledge).
 When a user asks for data that maps to properties inside these JSON fields, you MUST use OPENJSON(), JSON_VALUE(), or JSON_QUERY() with the exact paths defined below. DO NOT guess JSON property names.
 
+DISAMBIGUATION RULES:
+- The SAME table and column may have MULTIPLE JSON structures depending on the product or context (indicated by "Context/Product").
+- When the user mentions or implies a specific product/context, use ONLY the matching derived knowledge entry.
+- NEVER merge properties from different contexts.
+- If no context is mentioned and multiple entries exist for the same column, DO NOT guess. Instead, return a SQL comment asking the user to clarify which product context they mean.
+
 ${annotations.map(a => `
 ---
 Table: ${a.tableName}
 Column: ${a.columnName}
+Context/Product: ${a.contextLabel || 'Default (Applies to all unless overridden)'}
 JSON Structure:
 ${a.jsonStructure}
 Description: ${a.description || '-'}

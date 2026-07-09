@@ -8,6 +8,7 @@ export const schemaFieldAnnotations = pgTable('schema_field_annotations', {
     .references(() => schemas.id, { onDelete: 'cascade' }),
   tableName: varchar('table_name', { length: 255 }).notNull(),
   columnName: varchar('column_name', { length: 255 }).notNull(),
+  contextLabel: varchar('context_label', { length: 255 }),
   jsonStructure: text('json_structure').notNull(),
   description: text('description'),
   createdAt: timestamp('created_at').defaultNow().notNull(),

@@ -1,0 +1,1 @@
+ALTER TABLE "schema_field_annotations" ADD COLUMN "context_label" varchar(255);

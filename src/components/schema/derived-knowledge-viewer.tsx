@@ -11,6 +11,7 @@ interface AnnotationItem {
   id: string;
   tableName: string;
   columnName: string;
+  contextLabel: string | null;
   jsonStructure: string;
   description: string | null;
   createdAt: string;
@@ -131,6 +132,11 @@ export function DerivedKnowledgeViewer({ annotations }: DerivedKnowledgeViewerPr
                 <span className="font-mono text-sm font-bold text-amber-400 truncate" title={annotation.columnName}>
                   {annotation.columnName}
                 </span>
+                {annotation.contextLabel && (
+                  <Badge variant="secondary" className="ml-2 bg-white/20 text-white border-0 font-mono text-[9px] px-1.5 shrink-0">
+                    {annotation.contextLabel}
+                  </Badge>
+                )}
               </div>
               <Badge className="bg-white/10 hover:bg-white/20 text-white border-0 font-mono text-[10px] shrink-0">JSON</Badge>
             </div>
