@@ -74,6 +74,12 @@ export async function POST(req: Request) {
       content: m.content,
     }));
 
+    // Append the current user's message
+    aiMessages.push({
+      role: 'user',
+      content: message.trim(),
+    });
+
     // Determine if derived knowledge is relevant to the user's message
     const isRelevant = isDerivedKnowledgeRelevant(message, annotations);
     const relevantAnnotations = isRelevant ? annotations : [];
