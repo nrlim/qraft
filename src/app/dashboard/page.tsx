@@ -27,8 +27,9 @@ import {
 import { SchemaMap } from "@/components/schema/schema-map";
 import { DerivedKnowledgeViewer } from "@/components/schema/derived-knowledge-viewer";
 import { ParsedTable } from "@/lib/utils/sql-parser";
-import { Sparkles, Copy, Check, Play, Database, Plus, Loader2, User, Eye, Search } from "lucide-react";
+import { Sparkles, Copy, Check, Play, Database, Plus, Loader2, User, Eye, Search, ShieldAlert, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
 
 interface SchemaOption {
   id: string;
@@ -59,6 +60,8 @@ export default function DashboardPage() {
   const [isTablesLoading, setIsTablesLoading] = useState(false);
   const [showMapDialog, setShowMapDialog] = useState(false);
   const [mapSearchQuery, setMapSearchQuery] = useState("");
+  const [guardrailsEnabled, setGuardrailsEnabled] = useState(true);
+  const [userRole, setUserRole] = useState<string>("user");
 
   const filteredSchemas = schemaOptions.filter((s) =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -83,9 +86,40 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const fetchUser = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const json = await res.json();
+        setUserRole(json.data.role);
+      }
+    } catch {
+      // silently fail
+    }
+  }, []);
+
   useEffect(() => {
     fetchSchemas();
-  }, [fetchSchemas]);
+    fetchUser();
+  }, [fetchSchemas, fetchUser]);
+
+  const fetchHistory = useCallback(async (sid: string) => {
+    try {
+      const res = await fetch(`/api/generations?schemaId=${sid}`);
+      if (res.ok) {
+        const json = await res.json();
+        setMessages(
+          json.data.map((m: any) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
 
   // Load chat history from DB when schema changes
   useEffect(() => {
@@ -93,23 +127,7 @@ export default function DashboardPage() {
       setMessages([]);
       return;
     }
-    const fetchHistory = async () => {
-      try {
-        const res = await fetch(`/api/generations?schemaId=${schemaId}`);
-        if (res.ok) {
-          const json = await res.json();
-          setMessages(
-            json.data.map((m: any) => ({
-              id: m.id,
-              role: m.role as "user" | "assistant",
-              content: m.content,
-            }))
-          );
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    };
+    
     const fetchTablesAndAnnotations = async () => {
       setIsTablesLoading(true);
       try {
@@ -134,9 +152,9 @@ export default function DashboardPage() {
       }
     };
     
-    fetchHistory();
+    fetchHistory(schemaId);
     fetchTablesAndAnnotations();
-  }, [schemaId]);
+  }, [schemaId, fetchHistory]);
 
   // Auto scroll to bottom of chat
   useEffect(() => {
@@ -172,7 +190,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage, schemaId }),
+        body: JSON.stringify({ message: userMessage, schemaId, guardrailsEnabled }),
       });
 
       if (!res.ok || !res.body) {
@@ -301,6 +319,24 @@ export default function DashboardPage() {
                   >
                     <Eye className="size-4" />
                   </Button>
+                )}
+                
+                {userRole === "admin" && (
+                  <div className="flex items-center gap-2 ml-4 pl-4 border-l border-[#1C2024]/10">
+                    <div className="flex items-center gap-1.5" title={guardrailsEnabled ? "Guardrails enabled: Destructive queries are restricted." : "Guardrails disabled: Destructive queries are allowed."}>
+                      {guardrailsEnabled ? (
+                        <ShieldCheck className="size-4 text-green-600" />
+                      ) : (
+                        <ShieldAlert className="size-4 text-amber-500" />
+                      )}
+                      <span className="text-xs font-medium text-[#1C2024]/70 mr-1">Guardrails</span>
+                    </div>
+                    <Switch 
+                      checked={guardrailsEnabled} 
+                      onCheckedChange={setGuardrailsEnabled}
+                      aria-label="Toggle SQL Guardrails"
+                    />
+                  </div>
                 )}
               </div>
             ) : (

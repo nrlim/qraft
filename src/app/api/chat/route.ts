@@ -5,6 +5,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { verifySession } from '@/lib/auth/session';
 import { getAiModel } from '@/lib/ai/provider';
 import { buildSystemPrompt } from '@/lib/ai/system-prompt';
+import { validateSqlOutput } from '@/lib/ai/guardrails';
 
 // Maximum number of prior messages to include as context for the AI.
 // Keeping this bounded prevents token inflation while still giving
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    const { message, schemaId } = await req.json();
+    const { message, schemaId, guardrailsEnabled = true } = await req.json();
 
     if (!schemaId) {
       return new Response('Schema ID is required', { status: 400 });
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
     });
 
     const model = getAiModel() as any;
-    const systemPrompt = buildSystemPrompt(schema.sqlContent, annotations);
+    const systemPrompt = buildSystemPrompt(schema.sqlContent, annotations, guardrailsEnabled);
 
     const result = await streamText({
       model,
@@ -86,12 +87,16 @@ export async function POST(req: Request) {
       messages: aiMessages,
       temperature: 0.1,
       onFinish: async ({ text }) => {
+        // Run server-side guardrail validation
+        const validation = validateSqlOutput(text, { restrictDestructive: guardrailsEnabled });
+        const finalContent = validation.passed ? text : (validation.replacementText || text);
+
         // 4. Persist the AI response
         await db.insert(generations).values({
           schemaId,
           userId: session.userId,
           role: 'assistant',
-          content: text,
+          content: finalContent,
         });
       },
     });
